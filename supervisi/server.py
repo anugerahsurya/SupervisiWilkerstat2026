@@ -13,6 +13,7 @@ from contextlib import closing
 from datetime import datetime
 from io import TextIOWrapper
 from pathlib import Path
+from tempfile import gettempdir
 
 from flask import Flask, Response, abort, jsonify, request, send_from_directory
 from werkzeug.exceptions import HTTPException
@@ -23,7 +24,7 @@ from narration import TOKEN, marked, narrative, plain
 HERE = Path(__file__).resolve().parent
 WORKSPACE = HERE.parent
 REFERENCES = WORKSPACE / "Referensi"
-RESULTS = HERE / "hasil"
+RESULTS = (Path(gettempdir()) / "wilkerstat-hasil" if os.environ.get("VERCEL") else HERE / "hasil")
 FILES = {"polygon": WORKSPACE / "Prod_SLS_202611308.geojson",
          "point": WORKSPACE / "1308_landmark_bangunan_se.geojson"}
 LIMIT = 512 * 1024 * 1024

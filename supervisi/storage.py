@@ -6,6 +6,7 @@ from tempfile import NamedTemporaryFile
 
 import psycopg
 from dotenv import load_dotenv
+from werkzeug.exceptions import ServiceUnavailable
 
 HERE = Path(__file__).resolve().parent
 load_dotenv(HERE / ".env", encoding="utf-8-sig")
@@ -19,7 +20,7 @@ REFERENCES = {
 def connect():
     url = os.environ.get("WILKERSTAT_DATABASE_URL")
     if not url:
-        raise RuntimeError("Isi WILKERSTAT_DATABASE_URL di supervisi/.env untuk menghubungkan aplikasi.")
+        raise ServiceUnavailable("Koneksi Supabase belum dikonfigurasi. Tetapkan WILKERSTAT_DATABASE_URL pada environment server.")
     return psycopg.connect(url, sslmode="require", connect_timeout=12)
 
 
