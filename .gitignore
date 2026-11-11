@@ -1,0 +1,10 @@
+.env
+**/.env
+__pycache__/
+*.sqlite*
+*.geojson
+*.gpkg
+/akun.txt
+/Referensi/
+/supervisi/hasil/
+/supervisi/monev_1308.json
