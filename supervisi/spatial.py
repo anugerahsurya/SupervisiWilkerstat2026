@@ -117,9 +117,8 @@ def spatial_checks(polygons, points):
     crs = rule("II.S", "Sistem koordinat kedua layer", "Juknis, hlm. PDF 238", "GeoJSON tanpa deklarasi CRS dibaca sebagai WGS 84 dalam urutan bujur, lintang.")
     pt_geom = rule("III.G", "Validitas geometri titik", POINT, "Memeriksa tipe Point serta rentang dan kelengkapan koordinat.")
     move = rule("III.P", "Konsistensi pergeseran titik", POINT, "Membandingkan posisi awal dan akhir dengan flag_position, serta koordinat akhir dengan geometri. Toleransi numerik 0,000000001 derajat.")
-    flag = rule("III.R", "Titik berstatus luar batas", POINT, "Menelusuri setiap titik yang masih memiliki flag_repair = 1.")
     inside = rule("III.B", "Posisi titik terhadap Sub-SLS", POINT, "Mencocokkan geometri titik dengan idsubsls_edited pada poligon yang diinput. Titik pada garis batas atau di beberapa poligon memerlukan konfirmasi.")
-    checks = [crs, geo, vertices, overlap, duplicate, gaps, pt_geom, move, flag, inside]
+    checks = [crs, geo, vertices, overlap, duplicate, gaps, pt_geom, move, inside]
     poly_ok, pt_ok = crs_valid(polygons), crs_valid(points)
     for ok, name in [(poly_ok, "Layer poligon"), (pt_ok, "Layer titik")]:
         if not ok:
@@ -248,17 +247,12 @@ def spatial_checks(polygons, points):
         inconsistent += int(mismatch)
         if messages:
             issue(move, label, " ".join(messages))
-        repair = str(props.get("flag_repair"))
-        if repair == "1":
-            issue(flag, label, "flag_repair masih 1. Cocokkan dengan peta lapangan dan bukti posisi sebelum menutup temuan.")
-        elif repair != "0":
-            issue(flag, label, "flag_repair kosong atau di luar kode 0/1.")
     eval_points()
     move["detail"] += f" {missing_pairs} fitur tanpa pasangan koordinat yang dapat dibandingkan; {inconsistent} fitur dengan ketidakcocokan terukur."
     if missing_pairs and not inconsistent:
         move["status"] = "konfirmasi"
     if not features:
-        for check in (pt_geom, move, flag):
+        for check in (pt_geom, move):
             check["status"] = "tidak_dinilai"
             check["detail"] += " Layer titik kosong."
     if not polygons["features"]:

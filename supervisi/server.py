@@ -75,7 +75,39 @@ def db_file(key):
     path = RESULTS / (key + ".sqlite")
     if not path.is_file() and not storage.restore_run(key, path):
         abort(404)
+    update_cached_scope(path)
     return path
+
+
+def update_cached_scope(path):
+    """Terapkan cakupan baru pada arsip lama tanpa mengubah ID hasil atau catatan."""
+    from monitoring import outside_rule
+    with closing(sqlite3.connect(path)) as db:
+        if db.execute("pragma user_version").fetchone()[0] >= 1:
+            return
+        with db:
+            db.execute("begin immediate")
+            if db.execute("pragma user_version").fetchone()[0] >= 1:
+                return
+            data = json.loads(db.execute("select data from summary").fetchone()[0])
+            rules = {rule["id"]: rule for rule in data["rules"]}
+            target = rules.get("monev-titik")
+            rows = [dict(object=obj, detail=detail) for obj, detail in db.execute(
+                "select object,detail from findings where rule='monev-titik' "
+                "and detail like '% flag_repair = 1, target Monev 0.' order by seq")]
+            status = target["status"] if target else "tidak_dinilai"
+            if status == "temuan" and not rows:
+                status = "konfirmasi"
+            revised = outside_rule(rows, status, target["source"] if target else "Monev",
+                                   target["detail"] if target else "Arsip ini belum memuat daftar target Monev.")
+            revised["issue_count"] = len(rows)
+            revised["issues"] = rows[:40]
+            rules["III.R"].update(revised)
+            db.execute("delete from findings where rule='III.R'")
+            db.executemany("insert into findings values ('III.R',?,?,?)",
+                           ((i, r["object"], r["detail"]) for i,r in enumerate(rows)))
+            db.execute("update summary set data=?", (json.dumps(data, ensure_ascii=False),))
+            db.execute("pragma user_version=1")
 
 
 def summary(key):
@@ -128,6 +160,7 @@ def evaluate(key, layers, names):
     try:
         with closing(sqlite3.connect(tmp)) as db:
             db.executescript("""
+                PRAGMA user_version=1;
                 CREATE TABLE summary(data TEXT);
                 CREATE TABLE findings(rule TEXT, seq INTEGER, object TEXT, detail TEXT,
                                       PRIMARY KEY(rule,seq)) WITHOUT ROWID;

@@ -5,8 +5,28 @@ from pathlib import Path
 SNAPSHOT = Path(__file__).with_name("monev_1308.json")
 
 
+def outside_rule(rows, status, source, scope):
+    affected = {row["detail"].split()[2].rstrip(".") for row in rows}
+    count = f"{len(rows):,}".replace(",", ".")
+    return dict(id="III.R", title="Titik berstatus luar batas",
+                source="Modul III.1–2 · Juknis, hlm. PDF 330–335 · " + source,
+                status="temuan" if rows else status,
+                detail=scope if status == "tidak_dinilai" and not rows else
+                scope + f" Sebanyak {count} titik pada {len(affected)} Sub-SLS target memiliki flag_repair = 1.",
+                issues=rows)
+
+
 def monitoring(layers, rules):
-    snap = json.loads(SNAPSHOT.read_text(encoding="utf-8"))
+    if SNAPSHOT.is_file():
+        snap = json.loads(SNAPSHOT.read_text(encoding="utf-8"))
+    else:
+        from storage import connect
+        with connect() as db:
+            row = db.execute("select contents from wilkerstat.shared_files where name=%s",
+                             (SNAPSHOT.name,)).fetchone()
+        if not row:
+            raise ValueError("Daftar Sub-SLS target Monev belum tersedia untuk pemeriksaan ini.")
+        snap = json.loads(row[0])
     ids = set(snap["ids"])
     code = snap["kabupaten"]
     source = f"Monev Wilkerstat · {snap['menu']} · salinan {snap['tanggal']} · {snap['sumber']}"
@@ -19,7 +39,7 @@ def monitoring(layers, rules):
                  source=source, status="tidak_dinilai", issues=[],
                  detail="Cakupan target mengikuti level_6_full_code pada titik dan daftar ID terdaftar di Monev.")
     if code not in area:
-        return [review, flags]
+        return [review, flags, outside_rule([], "tidak_dinilai", source, review["detail"])]
     local = next(r for r in rules if r["id"] == "I.2b")
     hierarchy = {r["object"] for r in local["issues"] if r["object"].startswith(code)}
     review["status"] = "konfirmasi"
@@ -33,6 +53,7 @@ def monitoring(layers, rules):
         else:
             note = "Terdaftar pada kedua sumber."
         review["issues"].append(dict(object=sid, detail=note))
+    outside = []
     target = valid = missing = 0
     for i, f in enumerate(layers["point"]["features"], 1):
         p = f["properties"]
@@ -49,11 +70,16 @@ def monitoring(layers, rules):
         else:
             flags["issues"].append(dict(object=str(p.get("assignment_id") or f"Fitur #{i}"),
                                         detail=f"Sub-SLS target {key}. flag_repair = {flag}, target Monev 0."))
+            if flag == "1":
+                outside.append(flags["issues"][-1])
     def n(v):
         return f"{v:,}".replace(",", ".")
-    flags["detail"] += (f" Khusus 1308: {n(target)} titik unggahan masuk cakupan 43 ID dalam salinan Monev; "
+    flags["detail"] += (f" Khusus 1308: {n(target)} titik unggahan masuk cakupan {len(ids)} ID dalam salinan Monev; "
                         f"{n(valid)} bernilai flag_repair = 0. {n(missing)} fitur tanpa kunci 16 digit yang dapat dibaca. "
                         "Angka dihitung dari berkas titik yang sedang diperiksa.")
     flags["status"] = ("temuan" if flags["issues"] else "tidak_dinilai" if not target
                        else "konfirmasi" if missing else "sesuai")
-    return [review, flags]
+    scope = (f"Pemeriksaan mencakup {n(target)} titik yang kode Sub-SLS asalnya (level_6_full_code) "
+             f"tercantum dalam daftar {len(ids)} Sub-SLS Monev.")
+    outside_status = "tidak_dinilai" if not target else "konfirmasi" if missing or target != valid + len(outside) else "sesuai"
+    return [review, flags, outside_rule(outside, outside_status, source, scope)]
