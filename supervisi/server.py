@@ -28,7 +28,12 @@ FILES = {"polygon": WORKSPACE / "Prod_SLS_202611308.geojson",
          "point": WORKSPACE / "1308_landmark_bangunan_se.geojson"}
 LIMIT = 512 * 1024 * 1024
 app = Flask(__name__, static_folder=str(HERE / "static"), static_url_path="/static")
-app.config.update(MAX_CONTENT_LENGTH=LIMIT, TRUSTED_HOSTS=["localhost", "127.0.0.1"])
+trusted_hosts = ["localhost", "127.0.0.1", "supervisiwilkerstat.vercel.app"]
+for variable in ("VERCEL_URL", "VERCEL_BRANCH_URL", "VERCEL_PROJECT_PRODUCTION_URL"):
+    host = os.environ.get(variable)
+    if host:
+        trusted_hosts.append(host)
+app.config.update(MAX_CONTENT_LENGTH=LIMIT, TRUSTED_HOSTS=trusted_hosts)
 app.jinja_env.filters["columns"] = marked
 worker = threading.Lock()
 LABELS = {"sesuai": "Sesuai", "temuan": "Temuan", "konfirmasi": "Perlu konfirmasi",
